@@ -6,7 +6,19 @@ import de.spinfo.bkis.sutsiparse.io.IO;
 
 public class Main {
 	
-	
+	/*		Ω	beginn Übersetzung
+	 * 		^	Ende des Eintrags
+	 * 		≤	Wort hier nochmal einfügen
+	 * 		%	andere (eigene) Schreibweise
+	 * 		¡	i mit Punkt drunter
+	 * 		
+	 * 		
+	 * 		
+	 * 		
+	 * 		
+	 * 		
+	 * 		
+	 */
 
 	public static void main(String[] args) {
 		IO io = new IO();
