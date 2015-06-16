@@ -14,6 +14,8 @@ import java.util.Scanner;
 
 public class IO {
 	
+	
+	
 	public void convertToTxt(String stackXMLDirPath, String targetPath){
 		List<File> files = new ArrayList<File>();
 		files = getFiles(files, new File("datenXML").toPath(), "^card_.*");
@@ -77,5 +79,25 @@ public class IO {
 	    }
 	    return files;
 	} 
+	
+	public String[] readEntryLines(String txtPath){
+		File f = new File(txtPath);
+		Scanner scanner = null;
+		StringBuilder sb = new StringBuilder();
+		
+		try {
+			scanner = new Scanner(f);
+			//scanner.useDelimiter("\\<[\\/?]text\\>");
+			while (scanner.hasNextLine()){
+				String s = scanner.nextLine();
+				sb.append(s + "\n");
+			}
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
+		}
+		scanner.close();
+		
+		return sb.toString().split("\n");
+	}
 
 }
