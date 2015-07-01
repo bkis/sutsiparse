@@ -11,10 +11,15 @@ import de.spinfo.bkis.sutsiparse.io.IO;
 public class Main {
 	
 	//PATTERNS
-	private static final String P_GENUS = 	"(?<=\\s)[fmn]\\.(\\s\\([fmn]\\.\\))?(?=(:|\\s|$))";
-	private static final String P_GRAM = 	"(?<=\\s)(adj|adv|tr|int|tr\\/int|refl|pron|poss)\\.(?=(\\s|$))"; //TODO: unvollst.
-	private static final String P_SEM = 	"(?<=\\s\\()(fig|bot|polit).?(?=\\)(\\s|$))"; //TODO: unvollst.
-	private static final String P_SUBSEM = 	"(?<=\\s\\()[\\p{L}\\s]+(?=\\)(\\s|$))"; //TODO: ?
+	private static final String P_REMOVE1  = "\\s\\([abcde]\\)";
+	private static final String P_REMOVE2  = ":";
+	private static final String P_PARANT  = "[\\(\\)]";
+	private static final String P_GEN_ALT = "\\([ab]\\)";
+	private static final String P_INSERT  = "≤";
+	private static final String P_GENUS = 	"\\s[fmn]\\.(\\s\\([fmn]\\.\\))?(?=(\\s|$))";
+	private static final String P_GRAM = 	"\\s(pl|adj|adv|tr|int|tr\\/int|refl|pron|poss)\\.(?=(\\s|$))"; //TODO: unvollst.
+	private static final String P_SEM = 	"\\s\\((fig|bot|polit).?\\)(?=(\\s|$))"; //TODO: unvollst.
+	private static final String P_SUBSEM = 	"\\s\\([\\p{L}\\s]{2,}\\)(?=(\\s|$))"; //TODO: ?
 	//private static final String P_SEP = 	"Ω\\s";
 	//private static final String P_R_ENTRY = ".*(?=Ω)";
 	//private static final String P_D_ENTRY = "(?<=Ω).*";
@@ -90,11 +95,13 @@ public class Main {
 		//process entries
 		String[] entries = io.readEntryLines("sutsilvan_data_clean.txt");
 		String[] raw;
+		int id = 0;
 		for (String s : entries){
 			raw = s.split(" Ω ");
 			String[] entry = getEmptyEntry(doc.getHeader().length);
 			entry = processEntry(raw[0], entry, doc, "R");
 			entry = processEntry(raw[1], entry, doc, "D");
+			entry[0] = ""+id++;
 			doc.addEntry(entry);
 		}
 		
@@ -108,36 +115,48 @@ public class Main {
 	}
 	
 	private static String[] processEntry(String raw, String[] entry, SVDocument doc, String headerPrefix){
-		Pattern pattern;
-		Matcher matcher;
+		//cleanup
+		raw = raw.replaceAll(P_REMOVE1, "");
+		raw = raw.replaceAll(P_REMOVE2, "");
 		
 		//GENUS
-		pattern = Pattern.compile(P_GENUS);
-		matcher = pattern.matcher(raw);
-		if (matcher.find()) entry[doc.getFieldIndex(headerPrefix + "Genus")] = matcher.group();
-		raw.replaceAll(P_GENUS, "");
+		entry = processField(entry, P_GENUS, raw, doc.getFieldIndex(headerPrefix + "Genus"));
+		raw = raw.replaceAll(P_GENUS, "");
 		
 		//GRAM
-		pattern = Pattern.compile(P_GRAM);
-		matcher = pattern.matcher(raw);
-		if (matcher.find()) entry[doc.getFieldIndex(headerPrefix + "Grammatik")] = matcher.group();
-		raw.replaceAll(P_GRAM, "");
+		entry = processField(entry, P_GRAM, raw, doc.getFieldIndex(headerPrefix + "Grammatik"));
+		raw = raw.replaceAll(P_GRAM, "");
 		
 		//SEM
-		pattern = Pattern.compile(P_SEM);
-		matcher = pattern.matcher(raw);
-		if (matcher.find()) entry[doc.getFieldIndex(headerPrefix + "Semantik")] = matcher.group();
-		raw.replaceAll(P_SEM, "");
+		entry = processField(entry, P_SEM, raw, doc.getFieldIndex(headerPrefix + "Semantik"));
+		raw = raw.replaceAll(P_SEM, "");
+		entry[doc.getFieldIndex(headerPrefix + "Semantik")]
+				= entry[doc.getFieldIndex(headerPrefix + "Semantik")].replaceAll(P_PARANT, "");
 		
 		//SUBSEM
-		pattern = Pattern.compile(P_SUBSEM);
-		matcher = pattern.matcher(raw);
-		if (matcher.find()) entry[doc.getFieldIndex(headerPrefix + "Subsemantik")] = matcher.group();
-		raw.replaceAll(P_SUBSEM, "");
+		entry = processField(entry, P_SUBSEM, raw, doc.getFieldIndex(headerPrefix + "Subsemantik"));
+		raw = raw.replaceAll(P_SUBSEM, "");
+		entry[doc.getFieldIndex(headerPrefix + "Subsemantik")]
+				= entry[doc.getFieldIndex(headerPrefix + "Subsemantik")].replaceAll(P_PARANT, "");
 		
 		//STICHWORT
-		//entry[doc.getFieldIndex(headerPrefix + "Stichwort")] = raw;
+		entry[doc.getFieldIndex(headerPrefix + "Stichwort")] = raw;
 		
+		//INSERTIONS
+		int stichw = doc.getFieldIndex(headerPrefix + "Stichwort");
+		if (entry[stichw].contains(P_INSERT)){
+			String ins = entry[stichw].split(" ")[0];
+			entry[stichw] = entry[stichw].replace(P_INSERT, entry[stichw].split(" ")[0]).trim();
+			entry[stichw] = entry[stichw].substring(ins.length());
+		}
+		
+		return entry;
+	}
+	
+	private static String[] processField(String[] entry, String patternString, String raw, int fieldIndex){
+		Pattern pattern = Pattern.compile(patternString);
+		Matcher matcher = pattern.matcher(raw);
+		if (matcher.find()) entry[fieldIndex] = matcher.group().trim();
 		return entry;
 	}
 	
