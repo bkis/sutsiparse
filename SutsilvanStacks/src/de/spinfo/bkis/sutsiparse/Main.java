@@ -17,9 +17,9 @@ public class Main {
 	private static final String P_GEN_ALT = "\\([ab]\\)";
 	private static final String P_INSERT  = "≤";
 	private static final String P_GENUS = 	"\\s[fmn]\\.(\\s\\([fmn]\\.\\))?(?=(\\s|$))";
-	private static final String P_GRAM = 	"\\s(pl|adj|adv|tr|int|tr\\/int|refl|pron|poss)\\.(?=(\\s|$))"; //TODO: unvollst.
-	private static final String P_SEM = 	"\\s\\((fig|bot|polit).?\\)(?=(\\s|$))"; //TODO: unvollst.
-	private static final String P_SUBSEM = 	"\\s\\([\\p{L}\\s]{2,}\\)(?=(\\s|$))"; //TODO: ?
+	private static final String P_GRAM = 	"\\s(interj|indef|präp|konj|pl|adj|adv|tr|int|tr\\/int|refl|pers|pron|poss)\\.(?=(\\s|$))"; //TODO: unvollst.
+	private static final String P_SEM = 	"\\s\\((fig|bot|polit|sp).?\\)(?=(\\s|$))"; //TODO: unvollst.
+	private static final String P_SUBSEM = 	"\\s\\(.{2,}\\)(?=(\\s|$))"; //TODO: ?
 	//private static final String P_SEP = 	"Ω\\s";
 	//private static final String P_R_ENTRY = ".*(?=Ω)";
 	//private static final String P_D_ENTRY = "(?<=Ω).*";
@@ -101,6 +101,7 @@ public class Main {
 			String[] entry = getEmptyEntry(doc.getHeader().length);
 			entry = processEntry(raw[0], entry, doc, "R");
 			entry = processEntry(raw[1], entry, doc, "D");
+			entry = processRedirects(entry, doc);
 			entry[0] = ""+id++;
 			doc.addEntry(entry);
 		}
@@ -156,7 +157,28 @@ public class Main {
 	private static String[] processField(String[] entry, String patternString, String raw, int fieldIndex){
 		Pattern pattern = Pattern.compile(patternString);
 		Matcher matcher = pattern.matcher(raw);
-		if (matcher.find()) entry[fieldIndex] = matcher.group().trim();
+		while (matcher.find())
+			entry[fieldIndex] +=
+			(entry[fieldIndex].length() > 0 ? " " : "") + matcher.group().trim();
+		return entry;
+	}
+	
+	private static String[] processRedirects(String[] entry, SVDocument doc){
+		//CF-REDIRECTS
+		if (entry[doc.getFieldIndex("RStichwort")].contains("cf.")){
+			//D formatieren (cf. an den Anfang, eckige Klammern weg)
+			entry[doc.getFieldIndex("DStichwort")]
+					= "cf. " + entry[doc.getFieldIndex("DStichwort")];
+			entry[doc.getFieldIndex("RStichwort")]
+					= entry[doc.getFieldIndex("RStichwort")]
+							.replaceAll(" cf.", "");
+			entry[doc.getFieldIndex("RStichwort")]
+					= entry[doc.getFieldIndex("RStichwort")]
+							.replaceAll("[\\[\\]]", "");
+			//Verweis setzen
+			entry[doc.getFieldIndex("redirect_a")]
+					= "searchPhrase=" + entry[doc.getFieldIndex("DStichwort")].substring(4);
+		}
 		return entry;
 	}
 	
