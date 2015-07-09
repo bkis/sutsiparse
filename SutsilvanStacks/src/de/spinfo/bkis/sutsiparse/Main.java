@@ -12,14 +12,14 @@ public class Main {
 	
 	//PATTERNS
 	private static final String P_REMOVE1  = "\\s\\([abcde]\\)";
-	private static final String P_REMOVE2  = ":";
+	private static final String P_REMOVE2  = "[:≠]";
 	private static final String P_PARANT  = "[\\(\\)]";
-	private static final String P_GEN_ALT = "\\([ab]\\)";
 	private static final String P_INSERT  = "≤";
+	private static final String P_SEC_FORM  = " % ";
 	private static final String P_GENUS = 	"\\s[fmn]\\.(\\s\\([fmn]\\.\\))?(?=(\\s|$))";
-	private static final String P_GRAM = 	"\\s(interj|indef|präp|konj|pl|adj|adv|tr|int|tr\\/int|refl|pers|pron|poss)\\.(?=(\\s|$))"; //TODO: unvollst.
-	private static final String P_SEM = 	"\\s\\((fig|bot|polit|sp).?\\)(?=(\\s|$))"; //TODO: unvollst.
-	private static final String P_SUBSEM = 	"\\s\\(.{2,}\\)(?=(\\s|$))"; //TODO: ?
+	private static final String P_GRAM = 	"\\s(interj|indef|präp|prep|konj|pl|adj|adv|tr|int|tr\\/int|refl|pers|pron|poss)\\.(?=(\\s|$))"; //TODO: unvollst.
+	private static final String P_SEM = 	"\\s\\((sl|vulg|fam|form|hum|pej|poet|milit|col|fig|bot|polit|sp).?\\)(?=(\\s|$))"; //TODO: unvollst.
+	private static final String P_SUBSEM = 	"\\s\\([^-][^\\(]{2,}\\)(?=(\\s|$))"; //TODO: ?
 	//private static final String P_SEP = 	"Ω\\s";
 	//private static final String P_R_ENTRY = ".*(?=Ω)";
 	//private static final String P_D_ENTRY = "(?<=Ω).*";
@@ -40,6 +40,7 @@ public class Main {
 	 * 		¡	i
 	 * 		ø	o
 	 * 		°	u
+	 * 		ß	s
 	 * 		&lt;[0-9]&gt;	entfernen
 	 * 		\\[[0-9]\\]		entfernen
 	 * 		
@@ -102,6 +103,13 @@ public class Main {
 			entry = processEntry(raw[0], entry, doc, "R");
 			entry = processEntry(raw[1], entry, doc, "D");
 			entry = processRedirects(entry, doc);
+			
+			// " ' "-entfernen
+			if (entry[doc.getFieldIndex("RStichwort")].contains(" '"))
+				entry[doc.getFieldIndex("RStichwort")] = entry[doc.getFieldIndex("RStichwort")].split(" '")[0];
+			if (entry[doc.getFieldIndex("DStichwort")].contains(" '"))
+				entry[doc.getFieldIndex("DStichwort")] = entry[doc.getFieldIndex("DStichwort")].split(" '")[0];
+			
 			entry[0] = ""+id++;
 			doc.addEntry(entry);
 		}
@@ -120,12 +128,23 @@ public class Main {
 		raw = raw.replaceAll(P_REMOVE1, "");
 		raw = raw.replaceAll(P_REMOVE2, "");
 		
+		//REPLACEMENTS
+		if (headerPrefix.equals("R"))
+			raw = raw.replaceAll("ß", "s");
+		raw = raw.replaceAll("(?<=\\w)\\s\\,\\s", ", "); // " , " durch ", " ersetzen
+		
 		//GENUS
 		entry = processField(entry, P_GENUS, raw, doc.getFieldIndex(headerPrefix + "Genus"));
+		entry[doc.getFieldIndex(headerPrefix + "Genus")]
+				= entry[doc.getFieldIndex(headerPrefix + "Genus")].replaceAll("(?<=m)\\.\\s(?=f)", ", ");
+		entry[doc.getFieldIndex(headerPrefix + "Genus")]
+				= entry[doc.getFieldIndex(headerPrefix + "Genus")].replaceAll("\\.", "");
 		raw = raw.replaceAll(P_GENUS, "");
 		
 		//GRAM
 		entry = processField(entry, P_GRAM, raw, doc.getFieldIndex(headerPrefix + "Grammatik"));
+		entry[doc.getFieldIndex(headerPrefix + "Grammatik")]
+				= entry[doc.getFieldIndex(headerPrefix + "Grammatik")].replaceAll("\\.", "");
 		raw = raw.replaceAll(P_GRAM, "");
 		
 		//SEM
@@ -146,10 +165,20 @@ public class Main {
 		//INSERTIONS
 		int stichw = doc.getFieldIndex(headerPrefix + "Stichwort");
 		if (entry[stichw].contains(P_INSERT)){
+			int marker = entry[stichw].indexOf(P_INSERT);
 			String ins = entry[stichw].split(" ")[0];
-			entry[stichw] = entry[stichw].replace(P_INSERT, entry[stichw].split(" ")[0]).trim();
-			entry[stichw] = entry[stichw].substring(ins.length());
+			entry[stichw] = entry[stichw].replace(P_INSERT, ins).trim();
+			entry[stichw] = entry[stichw].substring(marker);
 		}
+		
+		//MEHRERE SCHREIBWEISEN (MARKIERT MIT %)
+		if (entry[stichw].contains(P_SEC_FORM)){
+			entry[stichw] = entry[stichw].substring(entry[stichw].indexOf(P_SEC_FORM) + P_SEC_FORM.length());
+		}
+		
+		//CLEAN STICHWORT
+		entry[doc.getFieldIndex(headerPrefix + "Stichwort")]
+				= entry[doc.getFieldIndex(headerPrefix + "Stichwort")].replaceAll("\\*", "");
 		
 		return entry;
 	}
@@ -168,7 +197,7 @@ public class Main {
 		if (entry[doc.getFieldIndex("RStichwort")].contains("cf.")){
 			//D formatieren (cf. an den Anfang, eckige Klammern weg)
 			entry[doc.getFieldIndex("DStichwort")]
-					= "cf. " + entry[doc.getFieldIndex("DStichwort")];
+					= "cf. " + entry[doc.getFieldIndex("DStichwort")].replaceAll("ß", "s");
 			entry[doc.getFieldIndex("RStichwort")]
 					= entry[doc.getFieldIndex("RStichwort")]
 							.replaceAll(" cf.", "");
@@ -179,6 +208,7 @@ public class Main {
 			entry[doc.getFieldIndex("redirect_a")]
 					= "searchPhrase=" + entry[doc.getFieldIndex("DStichwort")].substring(4);
 		}
+		
 		return entry;
 	}
 	
