@@ -17,8 +17,8 @@ public class Main {
 	private static final String P_INSERT  = "≤";
 	private static final String P_SEC_FORM  = " % ";
 	private static final String P_GENUS = 	"\\s[fmn]\\.(\\s\\([fmn]\\.\\))?(?=(\\s|$))";
-	private static final String P_GRAM = 	"\\s(interj|indef|präp|prep|konj|pl|adj|adv|tr|int|tr\\/int|refl|pers|pron|poss)\\.(?=(\\s|$))"; //TODO: unvollst.
-	private static final String P_SEM = 	"\\s\\((sl|vulg|fam|form|hum|pej|poet|milit|col|fig|bot|polit|sp).?\\)(?=(\\s|$))"; //TODO: unvollst.
+	private static final String P_GRAM = 	"\\s(conj|interj|interrog|indef|präp|prep|konj|pl|adj|adv|tr|int|tr\\/int|refl|pers|pron|poss)\\.(?=(\\s|$))"; //TODO: unvollst.
+	private static final String P_SEM = 	"\\s\\(?(num|sl|vulg|fam|form|hum|pej|poet|milit|col|fig|bot|polit|sp).*\\)?(?=(\\s|$))"; //TODO: unvollst.
 	private static final String P_SUBSEM = 	"\\s\\([^-][^\\(]{2,}\\)(?=(\\s|$))"; //TODO: ?
 	//private static final String P_SEP = 	"Ω\\s";
 	//private static final String P_R_ENTRY = ".*(?=Ω)";
@@ -116,7 +116,7 @@ public class Main {
 		
 		//write to file
 		try {
-			jaseval.writeSV(doc, "\t", "data_sm.tab", "UTF-8");
+			jaseval.writeSV(doc, "\t", "data_st.tab", "UTF-8");
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
@@ -136,7 +136,9 @@ public class Main {
 		//GENUS
 		entry = processField(entry, P_GENUS, raw, doc.getFieldIndex(headerPrefix + "Genus"));
 		entry[doc.getFieldIndex(headerPrefix + "Genus")]
-				= entry[doc.getFieldIndex(headerPrefix + "Genus")].replaceAll("(?<=m)\\.\\s(?=f)", ", ");
+				= entry[doc.getFieldIndex(headerPrefix + "Genus")].replaceAll("(?<=m)\\.\\s(?=f)", ",");
+		entry[doc.getFieldIndex(headerPrefix + "Genus")]
+				= entry[doc.getFieldIndex(headerPrefix + "Genus")].replaceAll("\\s\\(", "(");
 		entry[doc.getFieldIndex(headerPrefix + "Genus")]
 				= entry[doc.getFieldIndex(headerPrefix + "Genus")].replaceAll("\\.", "");
 		raw = raw.replaceAll(P_GENUS, "");
@@ -165,10 +167,10 @@ public class Main {
 		//INSERTIONS
 		int stichw = doc.getFieldIndex(headerPrefix + "Stichwort");
 		if (entry[stichw].contains(P_INSERT)){
-			int marker = entry[stichw].indexOf(P_INSERT);
+			//int marker = entry[stichw].indexOf(P_INSERT);
 			String ins = entry[stichw].split(" ")[0];
 			entry[stichw] = entry[stichw].replace(P_INSERT, ins).trim();
-			entry[stichw] = entry[stichw].substring(marker);
+			entry[stichw] = entry[stichw].substring(ins.length(), entry[stichw].length());
 		}
 		
 		//MEHRERE SCHREIBWEISEN (MARKIERT MIT %)
