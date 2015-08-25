@@ -1,6 +1,9 @@
 package de.spinfo.bkis.sutsiparse;
 
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -11,17 +14,21 @@ import de.spinfo.bkis.sutsiparse.io.IO;
 public class Main {
 	
 	private static JASEVAL jaseval = new JASEVAL();
+	private static int processUnits;
 	
 	//PATTERNS
 	private static final String P_REMOVE1  = "\\s\\([abcde]\\)";
 	private static final String P_REMOVE2  = "[:≠]";
+	private static final String P_REMOVE_POST  = "(\\*|\\,(?=$)|unpers\\.|impars\\.|\\s\\(f\\)|\\s\\(m\\)|\\s\\(n\\))";
 	private static final String P_PARANT  = "[\\(\\)]";
 	private static final String P_INSERT  = "≤";
 	private static final String P_SEC_FORM  = " % ";
 	private static final String P_GENUS = 	"\\s[fmn]\\.(\\s\\([fmn]\\.\\))?(?=(\\s|$))";
-	private static final String P_GRAM = 	"\\s(conj|interj|interrog|indef|präp|prep|konj|pl|adj|adv|tr|int|tr\\/int|refl|pers|pron|poss)\\.(?=(\\s|$))"; //TODO: unvollst.
-	private static final String P_SEM = 	"\\s\\(?(num|sl|vulg|fam|form|hum|pej|poet|milit|col|fig|bot|polit|sp).*\\)?(?=(\\s|$))"; //TODO: unvollst.
-	private static final String P_SUBSEM = 	"\\s\\([^-][^\\(]{2,}\\)(?=(\\s|$))"; //TODO: ?
+	private static final String P_GRAM = 	"\\s(conj|interj|interrog|indef|präp|prep|konj|pl|adj|adv|tr|int|tr\\/int|refl|pers|pron|poss)\\.(?=(\\s|$))";
+	private static final String P_SEM = 	"\\s\\(?(num|sl|vulg|fam|form|hum|pej|poet|milit|col|fig|bot|polit|sp).*\\)?(?=(\\s|$))";
+	private static final String P_SUBSEM = 	"\\s\\([^-][^\\(]{2,}\\)(?=(\\s|$))";
+	private static final String P_VARIANT = "\\[.*?\\]";
+	
 	//private static final String P_SEP = 	"Ω\\s";
 	//private static final String P_R_ENTRY = ".*(?=Ω)";
 	//private static final String P_D_ENTRY = "(?<=Ω).*";
@@ -79,6 +86,7 @@ public class Main {
 //		}
 		
 		//prepare document
+		System.out.println("[STATUS]\tpreparing new document...");
 		SVDocument doc = new SVDocument();
 		String[] fields = {"RecID", "DStichwort", "DGenus", "DGrammatik", "RStichwort",
 				"RGenus", "RGrammatik", "RFlex", "DStatus", "DStichwort_sort", "RStatus",
@@ -94,7 +102,19 @@ public class Main {
 		header.trim();
 		doc.setHeader(header, "\t");
 		
+		//LOAD ABBREVIATIONS LISTS
+		System.out.println("[STATUS]\tloading abbreviations lists...");
+		SVDocument abbrD = null;
+		SVDocument abbrR = null;
+		try {
+			abbrD = jaseval.readSVFile("abbrev_sutsilvan_d.csv", ";", false);
+			abbrR = jaseval.readSVFile("abbrev_sutsilvan_r.csv", ";", false);
+		} catch (IOException e1) {
+			e1.printStackTrace();
+		}
+		
 		//process entries
+		System.out.println("[STATUS]\tstarting entry processing...");
 		String[] entries = io.readEntryLines("sutsilvan_data_clean.txt");
 		String[] raw;
 		int id = 0;
@@ -104,6 +124,7 @@ public class Main {
 			entry = processEntry(raw[0], entry, doc, "R");
 			entry = processEntry(raw[1], entry, doc, "D");
 			entry = processRedirects(entry, doc);
+			entry = replaceAbbreviations(entry, doc, abbrD, abbrR);
 			
 			// " ' "-entfernen
 			if (entry[doc.getFieldIndex("RStichwort")].contains(" '"))
@@ -113,7 +134,9 @@ public class Main {
 			
 			entry[0] = "" + id++;
 			doc.addEntry(entry);
+			displayProcess(id, entries.length, false);
 		}
+		displayProcess(id, entries.length, true);
 		
 		//write to file
 		try {
@@ -181,7 +204,18 @@ public class Main {
 		
 		//CLEAN STICHWORT
 		entry[doc.getFieldIndex(headerPrefix + "Stichwort")]
-				= entry[doc.getFieldIndex(headerPrefix + "Stichwort")].replaceAll("\\*", "");
+				= entry[doc.getFieldIndex(headerPrefix + "Stichwort")].replaceAll(P_REMOVE_POST, "");
+		if (entry[doc.getFieldIndex(headerPrefix + "Stichwort")].contains("!")
+				|| entry[doc.getFieldIndex(headerPrefix + "Stichwort")].contains("?")){
+			entry[doc.getFieldIndex(headerPrefix + "Genus")] = "";
+		}
+		
+		//MOVE VARIANTS TO END OF ENTRY
+		String variant = getMatch(entry[doc.getFieldIndex(headerPrefix + "Stichwort")], P_VARIANT);
+		if (variant.length() > 0){
+			entry[doc.getFieldIndex(headerPrefix + "Stichwort")] = entry[doc.getFieldIndex(headerPrefix + "Stichwort")].replace(variant, "").trim();
+			entry[doc.getFieldIndex(headerPrefix + "Stichwort")] += " " + variant.trim();
+		}
 		
 		return entry;
 	}
@@ -193,6 +227,16 @@ public class Main {
 			entry[fieldIndex] +=
 			(entry[fieldIndex].length() > 0 ? " " : "") + matcher.group().trim();
 		return entry;
+	}
+	
+	private static String getMatch(String string, String patternString){
+		Pattern pattern = Pattern.compile(patternString);
+		Matcher matcher = pattern.matcher(string);
+		String toReturn = "";
+		if (matcher.find()){
+			toReturn = matcher.group();
+		}
+		return toReturn;
 	}
 	
 	private static String[] processRedirects(String[] entry, SVDocument doc){
@@ -216,18 +260,34 @@ public class Main {
 	}
 	
 	
-	private static String[] processAbbreviations(String[] entry){
-		SVDocument abbrD;
-		SVDocument abbrR;
+	private static String[] replaceAbbreviations(String[] entry, SVDocument doc, SVDocument abbrD, SVDocument abbrR){
+		Set<Integer> indicesD = new HashSet<Integer>(Arrays.asList(new Integer[]{
+				//doc.getFieldIndex("DGrammatik"),
+				doc.getFieldIndex("DSemantik"),
+				doc.getFieldIndex("DSubsemantik"),
+				doc.getFieldIndex("DGrammatik")}));
 		
-		try {
-			abbrD = jaseval.readSVFile("abbrev_sutsilvan_d.csv", ";", false);
-			abbrR = jaseval.readSVFile("abbrev_sutsilvan_r.csv", ";", false);
-		} catch (IOException e) {
-			e.printStackTrace();
+		Set<Integer> indicesR = new HashSet<Integer>(Arrays.asList(new Integer[]{
+				//doc.getFieldIndex("RGrammatik"),
+				doc.getFieldIndex("RSemantik"),
+				doc.getFieldIndex("RSubsemantik"),
+				doc.getFieldIndex("RGrammatik")}));
+		
+		//replace abbreviations
+		for (int i = 0; i < entry.length; i++) {
+			if (indicesD.contains(i)){
+				while (abbrD.hasNextEntry()){
+					String[] e = abbrD.nextEntry();
+					entry[i] = entry[i].replaceAll("(?<=(^|\\P{L}))" + e[0] + "\\.?(?=($|\\P{L}))", e[1]);
+				}
+			}
+			if (indicesR.contains(i)){
+				while (abbrR.hasNextEntry()){
+					String[] e = abbrR.nextEntry();
+					entry[i] = entry[i].replaceAll("(?<=(^|\\P{L}))" + e[0] + "\\.?(?=($|\\P{L}))", e[1]);
+				}
+			}
 		}
-		
-		//TODO
 		
 		return entry;
 	}
@@ -237,6 +297,15 @@ public class Main {
 		String[] entry = new String[length];
 		for (int i = 0; i < entry.length; i++) entry[i] = "";
 		return entry;
+	}
+	
+	private static void displayProcess(long step, long of, boolean reset){
+		if (++processUnits >= 1000 || reset){
+			processUnits = 0;
+			System.out.print("\t" + step + " / " + of + "\n");
+		} else {
+			System.out.print(processUnits % 10 == 0 ? "#" : "");
+		}
 	}
 
 }
