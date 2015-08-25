@@ -10,6 +10,8 @@ import de.spinfo.bkis.sutsiparse.io.IO;
 
 public class Main {
 	
+	private static JASEVAL jaseval = new JASEVAL();
+	
 	//PATTERNS
 	private static final String P_REMOVE1  = "\\s\\([abcde]\\)";
 	private static final String P_REMOVE2  = "[:≠]";
@@ -48,7 +50,6 @@ public class Main {
 
 	public static void main(String[] args) {
 		IO io = new IO();
-		JASEVAL jaseval = new JASEVAL();
 		
 		// extrahierte hypercard-daten (nur reintext)
 		//in eine gemeinsame datei schreiben
@@ -110,7 +111,7 @@ public class Main {
 			if (entry[doc.getFieldIndex("DStichwort")].contains(" '"))
 				entry[doc.getFieldIndex("DStichwort")] = entry[doc.getFieldIndex("DStichwort")].split(" '")[0];
 			
-			entry[0] = ""+id++;
+			entry[0] = "" + id++;
 			doc.addEntry(entry);
 		}
 		
@@ -213,6 +214,24 @@ public class Main {
 		
 		return entry;
 	}
+	
+	
+	private static String[] processAbbreviations(String[] entry){
+		SVDocument abbrD;
+		SVDocument abbrR;
+		
+		try {
+			abbrD = jaseval.readSVFile("abbrev_sutsilvan_d.csv", ";", false);
+			abbrR = jaseval.readSVFile("abbrev_sutsilvan_r.csv", ";", false);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		
+		//TODO
+		
+		return entry;
+	}
+	
 	
 	private static String[] getEmptyEntry(int length){
 		String[] entry = new String[length];
