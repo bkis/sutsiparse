@@ -19,15 +19,16 @@ public class Main {
 	//PATTERNS
 	private static final String P_REMOVE1  = "\\s\\([abcde]\\)";
 	private static final String P_REMOVE2  = "[:≠]";
-	private static final String P_REMOVE_POST  = "(\\*|\\,(?=$)|unpers\\.|impars\\.|\\s\\(f\\)|\\s\\(m\\)|\\s\\(n\\))";
-	private static final String P_PARANT  = "[\\(\\)]";
-	private static final String P_INSERT  = "≤";
-	private static final String P_SEC_FORM  = " % ";
+	private static final String P_REMOVE_POST = "(\\*|\\,(?=$)|unpers\\.|impars\\.|\\s\\(f\\)|\\s\\(m\\)|\\s\\(n\\))";
+	private static final String P_PARANT  =  "[\\(\\)]";
+	private static final String P_INSERT   = "≤";
+	private static final String P_SEC_FORM = " % ";
 	private static final String P_GENUS = 	"\\s[fmn]\\.(\\s\\([fmn]\\.\\))?(?=(\\s|$))";
-	private static final String P_GRAM = 	"\\s(conj|interj|interrog|indef|präp|prep|konj|pl|adj|adv|tr|int|tr\\/int|refl|pers|pron|poss)\\.(?=(\\s|$))";
-	private static final String P_SEM = 	"\\s\\(?(num|sl|vulg|fam|form|hum|pej|poet|milit|col|fig|bot|polit|sp).*\\)?(?=(\\s|$))";
+	private static final String P_GRAM = 	"\\s(conj|interj|interrog|indef|präp|prep|konj|pl|adj|adv|tr|int|tr\\/int|refl|pers|pron|poss|art|def)\\.(?=(\\s|$))";
+	private static final String P_SEM = 	"\\s\\(?(col|num|sl|vulg|fam|form|hum|pej|poet|milit|fig|bot|polit|sp).*?\\)?(?=(\\s|$))";
 	private static final String P_SUBSEM = 	"\\s\\([^-][^\\(]{2,}\\)(?=(\\s|$))";
 	private static final String P_VARIANT = "\\[.*?\\]";
+	private static final String P_SUFFIX = "\\s-\\p{L}+(?=\\b)";
 	
 	//private static final String P_SEP = 	"Ω\\s";
 	//private static final String P_R_ENTRY = ".*(?=Ω)";
@@ -106,9 +107,11 @@ public class Main {
 		System.out.println("[STATUS]\tloading abbreviations lists...");
 		SVDocument abbrD = null;
 		SVDocument abbrR = null;
+		SVDocument abbrLemma = null;
 		try {
 			abbrD = jaseval.readSVFile("abbrev_sutsilvan_d.csv", ";", false);
 			abbrR = jaseval.readSVFile("abbrev_sutsilvan_r.csv", ";", false);
+			abbrLemma = jaseval.readSVFile("abbrev_lemma.csv", ";", false);
 		} catch (IOException e1) {
 			e1.printStackTrace();
 		}
@@ -125,6 +128,7 @@ public class Main {
 			entry = processEntry(raw[1], entry, doc, "D");
 			entry = processRedirects(entry, doc);
 			entry = replaceAbbreviations(entry, doc, abbrD, abbrR);
+			entry = replaceLemmaAbbreviations(entry, doc, abbrLemma);
 			
 			// " ' "-entfernen
 			if (entry[doc.getFieldIndex("RStichwort")].contains(" '"))
@@ -148,6 +152,8 @@ public class Main {
 	}
 	
 	private static String[] processEntry(String raw, String[] entry, SVDocument doc, String headerPrefix){
+		int stichw = doc.getFieldIndex(headerPrefix + "Stichwort");
+		
 		//cleanup
 		raw = raw.replaceAll(P_REMOVE1, "");
 		raw = raw.replaceAll(P_REMOVE2, "");
@@ -186,15 +192,22 @@ public class Main {
 				= entry[doc.getFieldIndex(headerPrefix + "Subsemantik")].replaceAll(P_PARANT, "");
 		
 		//STICHWORT
-		entry[doc.getFieldIndex(headerPrefix + "Stichwort")] = raw;
+		entry[stichw] = raw;
 		
 		//INSERTIONS
-		int stichw = doc.getFieldIndex(headerPrefix + "Stichwort");
 		if (entry[stichw].contains(P_INSERT)){
 			//int marker = entry[stichw].indexOf(P_INSERT);
 			String ins = entry[stichw].split(" ")[0];
 			entry[stichw] = entry[stichw].replace(P_INSERT, ins).trim();
 			entry[stichw] = entry[stichw].substring(ins.length(), entry[stichw].length());
+			//move possible suffix behind insertion
+			String suff = getMatch(entry[stichw],P_SUFFIX);
+			if (suff.length() > 0){
+				entry[stichw] = entry[stichw].replace(suff, "").trim();
+				entry[stichw] = entry[stichw].substring(0,
+						entry[stichw].indexOf(ins) + ins.length()) + suff
+						+ entry[stichw].substring(entry[stichw].indexOf(ins) + ins.length());
+			}
 		}
 		
 		//MEHRERE SCHREIBWEISEN (MARKIERT MIT %)
@@ -203,18 +216,62 @@ public class Main {
 		}
 		
 		//CLEAN STICHWORT
-		entry[doc.getFieldIndex(headerPrefix + "Stichwort")]
-				= entry[doc.getFieldIndex(headerPrefix + "Stichwort")].replaceAll(P_REMOVE_POST, "");
-		if (entry[doc.getFieldIndex(headerPrefix + "Stichwort")].contains("!")
-				|| entry[doc.getFieldIndex(headerPrefix + "Stichwort")].contains("?")){
+		entry[stichw]
+				= entry[stichw].replaceAll(P_REMOVE_POST, "");
+		
+		//REMOVE GENUS OF ENTRIES CONTAINING ! OR ?
+		if (entry[stichw].contains("!")
+				|| entry[stichw].contains("?")){
 			entry[doc.getFieldIndex(headerPrefix + "Genus")] = "";
 		}
 		
 		//MOVE VARIANTS TO END OF ENTRY
-		String variant = getMatch(entry[doc.getFieldIndex(headerPrefix + "Stichwort")], P_VARIANT);
+		String variant = getMatch(entry[stichw], P_VARIANT);
 		if (variant.length() > 0){
-			entry[doc.getFieldIndex(headerPrefix + "Stichwort")] = entry[doc.getFieldIndex(headerPrefix + "Stichwort")].replace(variant, "").trim();
-			entry[doc.getFieldIndex(headerPrefix + "Stichwort")] += " " + variant.trim();
+			entry[stichw] = entry[stichw].replaceAll(",\\s\\[", " ["); //PRE-VARIANTS CLEANUP
+			entry[stichw] = entry[stichw].replace(variant, "").trim();
+			entry[stichw] += " " + variant.trim();
+		}
+		
+		//MOVE LEFTOVER "col" DATE TO SEMANTICS FIELD
+		String col = getMatch(entry[stichw], "\\[\\p{L}+\\]\\)");
+		if (col.length() > 0){
+			entry[stichw] = entry[stichw].replace(col, "").trim();
+			entry[doc.getFieldIndex(headerPrefix + "Semantik")] += " " + col.replaceAll("[\\(\\)]", "");
+		}
+		
+		//REMOVE UNWANTED SQUARE BRACKETS
+		if (entry[stichw].startsWith("[")
+				&& entry[stichw].endsWith("]")){
+			entry[stichw].replaceAll("[\\[\\]]", "");
+		}
+		
+		//REPLACE ", -" WITH " -"
+		entry[stichw] = entry[stichw].replace(", -", " -");
+		
+		//REMOVE COMMA AT BEGINING OF ENTRY
+		entry[stichw] = entry[stichw].replaceAll("^,\\s", "");
+		
+		//REMOVE DOUBLE SPACES
+		entry[stichw] = entry[stichw].replaceAll("\\s\\s", " ");
+		
+		//REMOVE TRAILING COMMAS
+		entry[stichw] = entry[stichw].replaceAll(",\\B", "").trim();
+		
+		//CORRECT GENUS FORMAT
+		entry[doc.getFieldIndex(headerPrefix + "Genus")]
+				= entry[doc.getFieldIndex(headerPrefix + "Genus")].replaceFirst("m,f", "m(f)");
+		entry[doc.getFieldIndex(headerPrefix + "Genus")]
+				= entry[doc.getFieldIndex(headerPrefix + "Genus")].replaceFirst(" n", ",n");
+		
+		return entry;
+	}
+	
+	private static String[] replaceLemmaAbbreviations(String[] entry, SVDocument doc, SVDocument abbrLemma){
+		while (abbrLemma.hasNextEntry()){
+			String[] e = abbrLemma.nextEntry();
+			entry[doc.getFieldIndex("DStichwort")] = entry[doc.getFieldIndex("DStichwort")].replaceAll(e[0], e[1]);
+			entry[doc.getFieldIndex("RStichwort")] = entry[doc.getFieldIndex("RStichwort")].replaceAll(e[0], e[1]);
 		}
 		
 		return entry;
