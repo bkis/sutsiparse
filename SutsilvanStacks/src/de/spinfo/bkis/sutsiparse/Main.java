@@ -27,7 +27,7 @@ public class Main {
 	private static final String P_GRAM = 	"\\s(conj|interj|interrog|indef|präp|prep|konj|pl|adj|adv|tr|int|tr\\/int|refl|pers|pron|poss|art|def)\\.(?=(\\s|$))";
 	private static final String P_SEM = 	"\\s\\(?(col|num|sl|vulg|fam|form|hum|pej|poet|milit|fig|bot|polit|sp).*?\\)?(?=(\\s|$))";
 	private static final String P_SUBSEM = 	"\\s\\([^-][^\\(]{2,}\\)(?=(\\s|$))";
-	private static final String P_VARIANT = "\\[.*?\\]";
+	private static final String P_VARIANT = "(\\[|\\().*?(\\]|\\))";
 	private static final String P_SUFFIX = "\\s-\\p{L}+(?=\\b)";
 	
 	//private static final String P_SEP = 	"Ω\\s";
@@ -185,6 +185,7 @@ public class Main {
 		entry[doc.getFieldIndex(headerPrefix + "Semantik")]
 				= entry[doc.getFieldIndex(headerPrefix + "Semantik")].replaceAll(P_PARANT, "");
 		
+		
 		//SUBSEM
 		entry = processField(entry, P_SUBSEM, raw, doc.getFieldIndex(headerPrefix + "Subsemantik"));
 		raw = raw.replaceAll(P_SUBSEM, "");
@@ -240,6 +241,37 @@ public class Main {
 			entry[doc.getFieldIndex(headerPrefix + "Semantik")] += " " + col.replaceAll("[\\(\\)]", "");
 		}
 		
+		//CORRECT GENUS FORMAT
+		entry[doc.getFieldIndex(headerPrefix + "Genus")]
+				= entry[doc.getFieldIndex(headerPrefix + "Genus")].replaceFirst("m,f", "m(f)");
+		entry[doc.getFieldIndex(headerPrefix + "Genus")]
+				= entry[doc.getFieldIndex(headerPrefix + "Genus")].replaceFirst(" n", ",n");
+		
+		// "pp." -> RFlex: Angaben mit "pp."
+//		String rflex = getMatch(entry[doc.getFieldIndex("RSubsemantik")], "pp\\.\\s\\p{L}+");
+//		if (rflex.length() > 0){
+//			entry[doc.getFieldIndex("RFlex")] = rflex.replace("pp.", "partizip perfect:");
+//			entry[doc.getFieldIndex("RSubsemantik")]
+//					= entry[doc.getFieldIndex("RSubsemantik")].replace(rflex, "").trim();
+//		}
+		
+		
+		// "pp." -> RFlex: Angaben ohne "pp.", aber mit "int" / "tr" / "tr/int"
+//		if (headerPrefix.equals("R")){
+//			if (entry[doc.getFieldIndex(headerPrefix + "Grammatik")].matches(".*(tr|int|tr/int).*")){
+//				String tr = getMatch(entry[doc.getFieldIndex(headerPrefix + "Subsemantik")], "\\b\\p{L}+\\b");
+//				if (tr.length() > 0){
+//					entry[doc.getFieldIndex(headerPrefix + "Subsemantik")] = entry[doc.getFieldIndex(headerPrefix + "Subsemantik")].replace(tr, "").trim();
+//					entry[doc.getFieldIndex("RFlex")] = tr.replaceAll(P_PARANT, "");
+//				}
+//			}
+//		}
+				
+				
+
+		
+		//// GENERAL CLEANUP ////
+		
 		//REMOVE UNWANTED SQUARE BRACKETS
 		if (entry[stichw].startsWith("[")
 				&& entry[stichw].endsWith("]")){
@@ -255,25 +287,23 @@ public class Main {
 		//REMOVE DOUBLE SPACES
 		entry[stichw] = entry[stichw].replaceAll("\\s\\s", " ");
 		
+		//REMOVE EXCESS SYMBOLS
+		entry[stichw] = entry[stichw].replaceAll("\\'\\s", "");
+		
 		//REMOVE TRAILING COMMAS
 		entry[stichw] = entry[stichw].replaceAll(",\\B", "").trim();
 		
-		//CORRECT GENUS FORMAT
-		entry[doc.getFieldIndex(headerPrefix + "Genus")]
-				= entry[doc.getFieldIndex(headerPrefix + "Genus")].replaceFirst("m,f", "m(f)");
-		entry[doc.getFieldIndex(headerPrefix + "Genus")]
-				= entry[doc.getFieldIndex(headerPrefix + "Genus")].replaceFirst(" n", ",n");
 		
 		return entry;
 	}
 	
 	private static String[] replaceLemmaAbbreviations(String[] entry, SVDocument doc, SVDocument abbrLemma){
-		while (abbrLemma.hasNextEntry()){
-			String[] e = abbrLemma.nextEntry();
-			entry[doc.getFieldIndex("DStichwort")] = entry[doc.getFieldIndex("DStichwort")].replaceAll(e[0], e[1]);
-			entry[doc.getFieldIndex("RStichwort")] = entry[doc.getFieldIndex("RStichwort")].replaceAll(e[0], e[1]);
+		for (int i = 0; i < entry.length; i++) {
+			while (abbrLemma.hasNextEntry()){
+				String[] e = abbrLemma.nextEntry();
+				entry[i] = entry[i].replaceAll("(?<=(\\s|\\A))" + e[0] + "\\.?(?=(\\s|\\z))", e[1]);
+			}
 		}
-		
 		return entry;
 	}
 	
@@ -335,13 +365,13 @@ public class Main {
 			if (indicesD.contains(i)){
 				while (abbrD.hasNextEntry()){
 					String[] e = abbrD.nextEntry();
-					entry[i] = entry[i].replaceAll("(?<=(^|\\P{L}))" + e[0] + "\\.?(?=($|\\P{L}))", e[1]);
+					entry[i] = entry[i].replaceAll("(?<=(\\b|\\A))" + e[0] + "\\.?(?=(\\P{L}|\\z))", e[1]);
 				}
 			}
 			if (indicesR.contains(i)){
 				while (abbrR.hasNextEntry()){
 					String[] e = abbrR.nextEntry();
-					entry[i] = entry[i].replaceAll("(?<=(^|\\P{L}))" + e[0] + "\\.?(?=($|\\P{L}))", e[1]);
+					entry[i] = entry[i].replaceAll("(?<=(\\b|\\A))" + e[0] + "\\.?(?=(\\P{L}|\\z))", e[1]);
 				}
 			}
 		}
