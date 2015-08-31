@@ -24,11 +24,14 @@ public class Main {
 	private static final String P_INSERT   = "≤";
 	private static final String P_SEC_FORM = " % ";
 	private static final String P_GENUS = 	"\\s[fmn]\\.(\\s\\([fmn]\\.\\))?(?=(\\s|$))";
-	private static final String P_GRAM = 	"\\s(conj|interj|interrog|indef|präp|prep|konj|pl|adj|adv|tr|int|tr\\/int|refl|pers|pron|poss|art|def)\\.(?=(\\s|$))";
+	private static final String P_GRAM = 	"\\s(conj|interj|interrog|indef|präp|prep|konj|pl|adj|adv|tr|int|tr\\/int|refl|pers|pron|poss|art|def)\\.";
 	private static final String P_SEM = 	"\\s\\(?(col|num|sl|vulg|fam|form|hum|pej|poet|milit|fig|bot|polit|sp).*?\\)?(?=(\\s|$))";
 	private static final String P_SUBSEM = 	"\\s\\([^-][^\\(]{2,}\\)(?=(\\s|$))";
-	private static final String P_VARIANT = "(\\[|\\().*?(\\]|\\))";
+	private static final String P_VARIANT = "\\[.*?\\]";
 	private static final String P_SUFFIX = "\\s-\\p{L}+(?=\\b)";
+	private static final String P_REMOVE_GRAM = "\\(.*\\+.*\\)";
+	private static final String P_REMOVE_FEM = "\\s-vla";
+	
 	
 	//private static final String P_SEP = 	"Ω\\s";
 	//private static final String P_R_ENTRY = ".*(?=Ω)";
@@ -130,6 +133,12 @@ public class Main {
 			entry = replaceAbbreviations(entry, doc, abbrD, abbrR);
 			entry = replaceLemmaAbbreviations(entry, doc, abbrLemma);
 			
+			//COLON AFTER "plural/Plural" IN SUBSEMANTIK
+			entry[doc.getFieldIndex("RSubsemantik")]
+					= entry[doc.getFieldIndex("RSubsemantik")].replaceAll("plural\\s(?=\\-?\\p{L}+)", "plural: ");
+			entry[doc.getFieldIndex("DSubsemantik")]
+					= entry[doc.getFieldIndex("DSubsemantik")].replaceAll("Plural\\s(?=\\-?\\p{L}+)", "Plural: ");
+			
 			// " ' "-entfernen
 			if (entry[doc.getFieldIndex("RStichwort")].contains(" '"))
 				entry[doc.getFieldIndex("RStichwort")] = entry[doc.getFieldIndex("RStichwort")].split(" '")[0];
@@ -157,6 +166,9 @@ public class Main {
 		//cleanup
 		raw = raw.replaceAll(P_REMOVE1, "");
 		raw = raw.replaceAll(P_REMOVE2, "");
+		raw = raw.replaceAll(P_REMOVE_GRAM, "");
+		raw = raw.replaceAll(P_REMOVE_FEM, "");
+		
 		
 		//REPLACEMENTS
 		if (headerPrefix.equals("R"))
@@ -241,20 +253,36 @@ public class Main {
 			entry[doc.getFieldIndex(headerPrefix + "Semantik")] += " " + col.replaceAll("[\\(\\)]", "");
 		}
 		
+		// REMOVE "f." FROM LEMMA ENTRIES
+		entry[stichw] = entry[stichw].replaceAll("\\bf\\.", "").trim();
+		
 		//CORRECT GENUS FORMAT
 		entry[doc.getFieldIndex(headerPrefix + "Genus")]
-				= entry[doc.getFieldIndex(headerPrefix + "Genus")].replaceFirst("m,f", "m(f)");
+				= entry[doc.getFieldIndex(headerPrefix + "Genus")].replace(" n", ",n");
 		entry[doc.getFieldIndex(headerPrefix + "Genus")]
-				= entry[doc.getFieldIndex(headerPrefix + "Genus")].replaceFirst(" n", ",n");
+				= entry[doc.getFieldIndex(headerPrefix + "Genus")].replace("m(f)", "m,f");
+		
+		//GENUS SUFFIX GERMAN "e(r)" -> Genus = "f(m)"
+		if (headerPrefix.equals("D")
+				&& entry[doc.getFieldIndex("DGenus")].equals("m,f")
+				&& entry[stichw].contains("e(r)")){
+			entry[doc.getFieldIndex("DGenus")] = "f,m";
+		}
 		
 		// "pp." -> RFlex: Angaben mit "pp."
-//		String rflex = getMatch(entry[doc.getFieldIndex("RSubsemantik")], "pp\\.\\s\\p{L}+");
-//		if (rflex.length() > 0){
-//			entry[doc.getFieldIndex("RFlex")] = rflex.replace("pp.", "partizip perfect:");
-//			entry[doc.getFieldIndex("RSubsemantik")]
-//					= entry[doc.getFieldIndex("RSubsemantik")].replace(rflex, "").trim();
-//		}
+		String rflex = getMatch(entry[doc.getFieldIndex("RSubsemantik")], "pp\\.\\s-?\\p{L}+");
+		if (rflex.length() > 0){
+			entry[doc.getFieldIndex("RFlex")] = rflex.replace("pp.", "partizip perfect:");
+			entry[doc.getFieldIndex("RSubsemantik")]
+					= entry[doc.getFieldIndex("RSubsemantik")].replace(rflex, "").trim();
+		}
 		
+		//MOVE SUFFIXES TO END OF ENTRY
+		String suff = getMatch(entry[stichw], "\\A\\(-\\p{L}+\\)");
+		if (suff.length() > 0){
+			entry[stichw] = entry[stichw].replace(suff, "").trim();
+			entry[stichw] += " " + suff.trim();
+		}
 		
 		// "pp." -> RFlex: Angaben ohne "pp.", aber mit "int" / "tr" / "tr/int"
 //		if (headerPrefix.equals("R")){
@@ -293,6 +321,11 @@ public class Main {
 		//REMOVE TRAILING COMMAS
 		entry[stichw] = entry[stichw].replaceAll(",\\B", "").trim();
 		
+		//REMOVE GENUS OF ENTRIES >= 3 WORDS (R)
+		if (entry[doc.getFieldIndex("RStichwort")].split("\\s").length >= 3){
+			entry[doc.getFieldIndex("DGenus")] = "";
+			entry[doc.getFieldIndex("RGenus")] = "";
+		}
 		
 		return entry;
 	}
@@ -334,7 +367,7 @@ public class Main {
 					= "cf. " + entry[doc.getFieldIndex("DStichwort")].replaceAll("ß", "s");
 			entry[doc.getFieldIndex("RStichwort")]
 					= entry[doc.getFieldIndex("RStichwort")]
-							.replaceAll(" cf.", "");
+							.replaceAll("\\s?cf.", "");
 			entry[doc.getFieldIndex("RStichwort")]
 					= entry[doc.getFieldIndex("RStichwort")]
 							.replaceAll("[\\[\\]]", "");
