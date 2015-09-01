@@ -25,7 +25,8 @@ public class Main {
 	private static final String P_SEC_FORM = " % ";
 	private static final String P_GENUS = 	"\\s[fmn]\\.(\\s\\([fmn]\\.\\))?(?=(\\s|$))";
 	private static final String P_GRAM = 	"\\s(conj|interj|interrog|indef|präp|prep|konj|pl|adj|adv|tr|int|tr\\/int|refl|pers|pron|poss|art|def)\\.";
-	private static final String P_SEM = 	"\\s\\(?(col|num|sl|vulg|fam|form|hum|pej|poet|milit|fig|bot|polit|sp).*?\\)?(?=(\\s|$))";
+	private static final String P_SEM = 	"\\s\\(?(nloc|npars|ON|PN|in Zus\\.|col|num|sl|vulg|fam|form|hum|pej|poet|milit|fig|bot|polit|sp).*?\\)?(?=(\\s|$))";
+	private static final String P_SUBSEM_COL = "\\s\\(col\\.\\s[\\p{L}\\.\\s]+\\)";
 	private static final String P_SUBSEM = 	"\\s\\([^-][^\\(]{2,}\\)(?=(\\s|$))";
 	private static final String P_VARIANT = "\\[.*?\\]";
 	private static final String P_SUFFIX = "\\s-\\p{L}+(?=\\b)";
@@ -169,11 +170,22 @@ public class Main {
 		raw = raw.replaceAll(P_REMOVE_GRAM, "");
 		raw = raw.replaceAll(P_REMOVE_FEM, "");
 		
-		
 		//REPLACEMENTS
-		if (headerPrefix.equals("R"))
-			raw = raw.replaceAll("ß", "s");
+		if (headerPrefix.equals("R")) raw = raw.replaceAll("ß", "s");
+		if (headerPrefix.equals("R")) raw = raw.replaceAll("¨", "S");
 		raw = raw.replaceAll("(?<=\\w)\\s\\,\\s", ", "); // " , " durch ", " ersetzen
+		
+		//"col."-ECTIV SPECIAL CASE (with word)
+		if (headerPrefix.equals("R")){
+			String col = getMatch(raw, P_SUBSEM_COL);
+			if (col.length() > 0){
+				raw = raw.replace(col, "").trim();
+				entry[doc.getFieldIndex("RSubsemantik")] = "colectiv: "
+						+ col.replaceAll("\\(col\\.\\s", "");
+				entry[doc.getFieldIndex("RSubsemantik")] = entry[doc.getFieldIndex("RSubsemantik")]
+						.replaceAll("\\)", "").replaceAll("\\s\\s", " ");
+			}
+		}
 		
 		//GENUS
 		entry = processField(entry, P_GENUS, raw, doc.getFieldIndex(headerPrefix + "Genus"));
@@ -319,7 +331,7 @@ public class Main {
 		entry[stichw] = entry[stichw].replaceAll("\\'\\s", "");
 		
 		//REMOVE TRAILING COMMAS
-		entry[stichw] = entry[stichw].replaceAll(",\\B", "").trim();
+		entry[stichw] = entry[stichw].replaceAll(",$", "").trim();
 		
 		//REMOVE GENUS OF ENTRIES >= 3 WORDS (R)
 		if (entry[doc.getFieldIndex("RStichwort")].split("\\s").length >= 3){
