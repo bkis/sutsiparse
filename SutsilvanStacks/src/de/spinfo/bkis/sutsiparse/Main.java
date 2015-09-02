@@ -31,7 +31,7 @@ public class Main {
 	private static final String P_VARIANT = "\\[.*?\\]";
 	private static final String P_SUFFIX = "\\s-\\p{L}+(?=\\b)";
 	private static final String P_REMOVE_GRAM = "\\(.*\\+.*\\)";
-	private static final String P_REMOVE_FEM = "\\s-vla";
+	private static final String P_REMOVE_FEM = "\\,?\\s\\-\\p{L}*(a|euse)";
 	
 	
 	//private static final String P_SEP = 	"Ω\\s";
@@ -168,7 +168,6 @@ public class Main {
 		raw = raw.replaceAll(P_REMOVE1, "");
 		raw = raw.replaceAll(P_REMOVE2, "");
 		raw = raw.replaceAll(P_REMOVE_GRAM, "");
-		raw = raw.replaceAll(P_REMOVE_FEM, "");
 		
 		//REPLACEMENTS
 		if (headerPrefix.equals("R")) raw = raw.replaceAll("ß", "s");
@@ -208,7 +207,6 @@ public class Main {
 		raw = raw.replaceAll(P_SEM, "");
 		entry[doc.getFieldIndex(headerPrefix + "Semantik")]
 				= entry[doc.getFieldIndex(headerPrefix + "Semantik")].replaceAll(P_PARANT, "");
-		
 		
 		//SUBSEM
 		entry = processField(entry, P_SUBSEM, raw, doc.getFieldIndex(headerPrefix + "Subsemantik"));
@@ -278,13 +276,25 @@ public class Main {
 		if (headerPrefix.equals("D")
 				&& entry[doc.getFieldIndex("DGenus")].equals("m,f")
 				&& entry[stichw].contains("e(r)")){
-			entry[doc.getFieldIndex("DGenus")] = "f,m";
+			entry[doc.getFieldIndex("DGenus")] = "f(m)";
+		}
+		if (headerPrefix.equals("D")
+				&& entry[doc.getFieldIndex("DGenus")].equals("m,f")
+				&& entry[stichw].contains("(in)")){
+			entry[doc.getFieldIndex("DGenus")] = "m(f)";
+		}
+		
+		//GENUS SUFFIX SUTSILVAN "(a)" -> Genus = "m(f)"
+		if (headerPrefix.equals("R")
+				&& entry[doc.getFieldIndex("RGenus")].contains("m")
+				&& entry[stichw].contains("(a)")){
+			entry[doc.getFieldIndex("RGenus")] = "m(f)";
 		}
 		
 		// "pp." -> RFlex: Angaben mit "pp."
-		String rflex = getMatch(entry[doc.getFieldIndex("RSubsemantik")], "pp\\.\\s-?\\p{L}+");
+		String rflex = getMatch(entry[doc.getFieldIndex("RSubsemantik")], "\\p{L}*\\s?pp\\.\\s-?\\p{L}+");
 		if (rflex.length() > 0){
-			entry[doc.getFieldIndex("RFlex")] = rflex.replace("pp.", "partizip perfect:");
+			entry[doc.getFieldIndex("RFlex")] = rflex.replaceAll("\\s?pp\\.", (rflex.indexOf("pp") > 0 ? "; " : "") + "partizip perfect:");
 			entry[doc.getFieldIndex("RSubsemantik")]
 					= entry[doc.getFieldIndex("RSubsemantik")].replace(rflex, "").trim();
 		}
@@ -297,17 +307,38 @@ public class Main {
 		}
 		
 		// "pp." -> RFlex: Angaben ohne "pp.", aber mit "int" / "tr" / "tr/int"
-//		if (headerPrefix.equals("R")){
-//			if (entry[doc.getFieldIndex(headerPrefix + "Grammatik")].matches(".*(tr|int|tr/int).*")){
-//				String tr = getMatch(entry[doc.getFieldIndex(headerPrefix + "Subsemantik")], "\\b\\p{L}+\\b");
-//				if (tr.length() > 0){
-//					entry[doc.getFieldIndex(headerPrefix + "Subsemantik")] = entry[doc.getFieldIndex(headerPrefix + "Subsemantik")].replace(tr, "").trim();
-//					entry[doc.getFieldIndex("RFlex")] = tr.replaceAll(P_PARANT, "");
-//				}
-//			}
-//		}
+		if (headerPrefix.equals("R")){
+			if (entry[doc.getFieldIndex("RGrammatik")].matches(".*?(tr|int|tr/int).*?")){
+				//"(tschainta)"
+				String tr = getMatch(entry[doc.getFieldIndex(headerPrefix + "Subsemantik")], "\\p{L}+");
+				if (tr.length() > 0 && tr.charAt(0) == entry[stichw].charAt(0)){
+					entry[doc.getFieldIndex(headerPrefix + "Subsemantik")] = entry[doc.getFieldIndex(headerPrefix + "Subsemantik")].replace(tr, "").trim();
+					entry[doc.getFieldIndex("RFlex")] = tr;
+				}
+				//"(-ùna)"
+				String femSuff = getMatch(entry[stichw], "\\s\\(\\-\\p{L}*a\\)");
+				if (femSuff.length() > 0){
+					entry[stichw] = entry[stichw].replace(femSuff, "").trim();
+					entry[doc.getFieldIndex("RFlex")] = entry[doc.getFieldIndex("RFlex")]
+							+ (entry[doc.getFieldIndex("RFlex")].length() == 0 ? "" : ", ")
+							+ femSuff.replaceAll("[\\(\\)\\s]", "");
+				}
+			}
+		}
 				
-				
+		// "-vla" etc. und Stammformen aus langen Einträgen (3+ Wörter) entfernen
+		if (headerPrefix.equals("R") && entry[stichw].split("\\s").length > 3){
+			entry[stichw] = entry[stichw].replaceAll(P_REMOVE_FEM, "");
+			entry[doc.getFieldIndex(headerPrefix + "Subsemantik")] = "";
+		}
+		
+		// "-vla" etc. mit Komma davor
+		if (headerPrefix.equals("R")){
+			String femAlt = getMatch(entry[stichw], P_REMOVE_FEM);
+			if (femAlt.length() > 0){
+				entry[stichw] = entry[stichw].replace(femAlt, ", " + femAlt);
+			}
+		}
 
 		
 		//// GENERAL CLEANUP ////
@@ -326,6 +357,9 @@ public class Main {
 		
 		//REMOVE DOUBLE SPACES
 		entry[stichw] = entry[stichw].replaceAll("\\s\\s", " ");
+		
+		//REMOVE DOUBLE COMMA
+		entry[stichw] = entry[stichw].replaceAll("\\,\\,", ",");
 		
 		//REMOVE EXCESS SYMBOLS
 		entry[stichw] = entry[stichw].replaceAll("\\'\\s", "");
@@ -346,7 +380,7 @@ public class Main {
 		for (int i = 0; i < entry.length; i++) {
 			while (abbrLemma.hasNextEntry()){
 				String[] e = abbrLemma.nextEntry();
-				entry[i] = entry[i].replaceAll("(?<=(\\s|\\A))" + e[0] + "\\.?(?=(\\s|\\z))", e[1]);
+				entry[i] = entry[i].replaceAll("\\b" + e[0].replace(".", "\\."), e[1]);
 			}
 		}
 		return entry;
