@@ -25,12 +25,12 @@ public class Main {
 	private static final String P_SEC_FORM = " % ";
 	private static final String P_GENUS = 	"\\s[fmn]\\.(\\s\\([fmn]\\.\\))?(?=(\\s|$))";
 	private static final String P_GRAM = 	"\\s(conj|interj|interrog|indef|präp|prep|konj|pl|adj|adv|tr|int|tr\\/int|refl|pers|pron|poss|art|def)\\.";
-	private static final String P_SEM = 	"\\s\\(?(nloc|npars|ON|PN|in Zus\\.|col|num|sl|vulg|fam|form|hum|pej|poet|milit|fig|bot|polit|sp).*?\\)?(?=(\\s|$))";
+	private static final String P_SEM = 	"\\s\\(?(nloc|npars|ON|PN|in Zus\\.|col|num|sl|vulg|fam|form|hum|pej|poet|milit|fig|bot|polit|sp)\\P{L}*\\)?(?=(\\s|$))";
 	private static final String P_SUBSEM_COL = "\\s\\(col\\.\\s[\\p{L}\\.\\s]+\\)";
 	private static final String P_SUBSEM = 	"\\s\\([^-][^\\(]{2,}\\)(?=(\\s|$))";
 	private static final String P_VARIANT = "\\[.*?\\]";
 	private static final String P_SUFFIX = "\\s-\\p{L}+(?=\\b)";
-	private static final String P_REMOVE_GRAM = "\\(.*\\+.*\\)";
+	private static final String P_REMOVE_GRAM = "\\([^\\+\\)]*\\+[^\\+\\)]*\\)";
 	private static final String P_REMOVE_FEM = "\\,?\\s\\-\\p{L}*(a|euse)";
 	
 	
@@ -173,6 +173,7 @@ public class Main {
 		if (headerPrefix.equals("R")) raw = raw.replaceAll("ß", "s");
 		if (headerPrefix.equals("R")) raw = raw.replaceAll("¨", "S");
 		raw = raw.replaceAll("(?<=\\w)\\s\\,\\s", ", "); // " , " durch ", " ersetzen
+		raw = raw.replaceAll("\\*", ""); // " , " durch ", " ersetzen
 		
 		//"col."-ECTIV SPECIAL CASE (with word)
 		if (headerPrefix.equals("R")){
@@ -202,6 +203,15 @@ public class Main {
 				= entry[doc.getFieldIndex(headerPrefix + "Grammatik")].replaceAll("\\.", "");
 		raw = raw.replaceAll(P_GRAM, "");
 		
+		// "pp." -> RFlex: Angaben mit "pp." (VERSCHACHTELTE KLAMMERN / EINFACHE KLAMMERN)
+		String rflex = getMatch(raw, "\\s\\(pp\\.\\s[^\\)\\(]*\\([^\\)\\(]*\\)[^\\)\\(]*\\)");
+		if (rflex.length() == 0) rflex = getMatch(raw, "\\s\\(pp\\.\\s[^\\)\\(]*\\)");
+		if (rflex.length() > 0){
+			entry[doc.getFieldIndex("RFlex")] = rflex.replaceAll("pp\\.", (rflex.indexOf("pp") > 2 ? "; " : "") + "partizip perfect:");
+			entry[doc.getFieldIndex("RFlex")] = entry[doc.getFieldIndex("RFlex")].trim().replaceAll("(\\A\\(|\\)\\Z)", "");
+			raw = raw.replace(rflex, "").trim();
+		}
+		
 		//SEM
 		entry = processField(entry, P_SEM, raw, doc.getFieldIndex(headerPrefix + "Semantik"));
 		raw = raw.replaceAll(P_SEM, "");
@@ -220,7 +230,7 @@ public class Main {
 		//INSERTIONS
 		if (entry[stichw].contains(P_INSERT)){
 			//int marker = entry[stichw].indexOf(P_INSERT);
-			String ins = entry[stichw].split(" ")[0];
+			String ins = entry[stichw].trim().split(" ")[0];
 			entry[stichw] = entry[stichw].replace(P_INSERT, ins).trim();
 			entry[stichw] = entry[stichw].substring(ins.length(), entry[stichw].length());
 			//move possible suffix behind insertion
@@ -291,14 +301,6 @@ public class Main {
 			entry[doc.getFieldIndex("RGenus")] = "m(f)";
 		}
 		
-		// "pp." -> RFlex: Angaben mit "pp."
-		String rflex = getMatch(entry[doc.getFieldIndex("RSubsemantik")], "\\p{L}*\\s?pp\\.\\s-?\\p{L}+");
-		if (rflex.length() > 0){
-			entry[doc.getFieldIndex("RFlex")] = rflex.replaceAll("\\s?pp\\.", (rflex.indexOf("pp") > 0 ? "; " : "") + "partizip perfect:");
-			entry[doc.getFieldIndex("RSubsemantik")]
-					= entry[doc.getFieldIndex("RSubsemantik")].replace(rflex, "").trim();
-		}
-		
 		//MOVE SUFFIXES TO END OF ENTRY
 		String suff = getMatch(entry[stichw], "\\A\\(-\\p{L}+\\)");
 		if (suff.length() > 0){
@@ -313,7 +315,7 @@ public class Main {
 				String tr = getMatch(entry[doc.getFieldIndex(headerPrefix + "Subsemantik")], "\\p{L}+");
 				if (tr.length() > 0 && tr.charAt(0) == entry[stichw].charAt(0)){
 					entry[doc.getFieldIndex(headerPrefix + "Subsemantik")] = entry[doc.getFieldIndex(headerPrefix + "Subsemantik")].replace(tr, "").trim();
-					entry[doc.getFieldIndex("RFlex")] = tr;
+					entry[doc.getFieldIndex("RFlex")] = tr + (entry[doc.getFieldIndex("RFlex")].length() == 0 ? "" : "; " + entry[doc.getFieldIndex("RFlex")]);
 				}
 				//"(-ùna)"
 				String femSuff = getMatch(entry[stichw], "\\s\\(\\-\\p{L}*a\\)");
