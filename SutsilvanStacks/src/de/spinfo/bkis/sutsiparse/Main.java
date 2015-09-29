@@ -3,6 +3,7 @@ package de.spinfo.bkis.sutsiparse;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -148,9 +149,21 @@ public class Main {
 			
 			entry[0] = "" + id++;
 			doc.addEntry(entry);
+			
+			//EXPAND GENUS VARIANS TO ADDITIONAL DUMMY ENTRIES
+			for (String[] exp : expandEntryVariants(entry, doc.getFieldIndex("DStichwort"))){
+				exp[0] = "" + id++;
+				doc.addEntry(exp);
+			}
+			for (String[] exp : expandEntryVariants(entry, doc.getFieldIndex("RStichwort"))){
+				exp[0] = "" + id++;
+				doc.addEntry(exp);
+			}
+			
 			displayProcess(id, entries.length, false);
 		}
 		displayProcess(id, entries.length, true);
+		
 		
 		//write to file
 		try {
@@ -177,7 +190,7 @@ public class Main {
 		
 		//"col."-ECTIV SPECIAL CASE (with word)
 		if (headerPrefix.equals("R")){
-			String col = getMatch(raw, P_SUBSEM_COL);
+			String col = getFirstMatch(raw, P_SUBSEM_COL);
 			if (col.length() > 0){
 				raw = raw.replace(col, "").trim();
 				entry[doc.getFieldIndex("RSubsemantik")] = "colectiv: "
@@ -204,8 +217,8 @@ public class Main {
 		raw = raw.replaceAll(P_GRAM, "");
 		
 		// "pp." -> RFlex: Angaben mit "pp." (VERSCHACHTELTE KLAMMERN / EINFACHE KLAMMERN)
-		String rflex = getMatch(raw, "\\s\\(pp\\.\\s[^\\)\\(]*\\([^\\)\\(]*\\)[^\\)\\(]*\\)");
-		if (rflex.length() == 0) rflex = getMatch(raw, "\\s\\(pp\\.\\s[^\\)\\(]*\\)");
+		String rflex = getFirstMatch(raw, "\\s\\(pp\\.\\s[^\\)\\(]*\\([^\\)\\(]*\\)[^\\)\\(]*\\)");
+		if (rflex.length() == 0) rflex = getFirstMatch(raw, "\\s\\(pp\\.\\s[^\\)\\(]*\\)");
 		if (rflex.length() > 0){
 			entry[doc.getFieldIndex("RFlex")] = rflex.replaceAll("pp\\.", (rflex.indexOf("pp") > 2 ? "; " : "") + "partizip perfect:");
 			entry[doc.getFieldIndex("RFlex")] = entry[doc.getFieldIndex("RFlex")].trim().replaceAll("(\\A\\(|\\)\\Z)", "");
@@ -234,7 +247,7 @@ public class Main {
 			entry[stichw] = entry[stichw].replace(P_INSERT, ins).trim();
 			entry[stichw] = entry[stichw].substring(ins.length(), entry[stichw].length());
 			//move possible suffix behind insertion
-			String suff = getMatch(entry[stichw],P_SUFFIX);
+			String suff = getFirstMatch(entry[stichw],P_SUFFIX);
 			if (suff.length() > 0){
 				entry[stichw] = entry[stichw].replace(suff, "").trim();
 				entry[stichw] = entry[stichw].substring(0,
@@ -259,7 +272,7 @@ public class Main {
 		}
 		
 		//MOVE VARIANTS TO END OF ENTRY
-		String variant = getMatch(entry[stichw], P_VARIANT);
+		String variant = getFirstMatch(entry[stichw], P_VARIANT);
 		if (variant.length() > 0){
 			entry[stichw] = entry[stichw].replaceAll(",\\s\\[", " ["); //PRE-VARIANTS CLEANUP
 			entry[stichw] = entry[stichw].replace(variant, "").trim();
@@ -267,7 +280,7 @@ public class Main {
 		}
 		
 		//MOVE LEFTOVER "col" DATE TO SEMANTICS FIELD
-		String col = getMatch(entry[stichw], "\\[\\p{L}+\\]\\)");
+		String col = getFirstMatch(entry[stichw], "\\[\\p{L}+\\]\\)");
 		if (col.length() > 0){
 			entry[stichw] = entry[stichw].replace(col, "").trim();
 			entry[doc.getFieldIndex(headerPrefix + "Semantik")] += " " + col.replaceAll("[\\(\\)]", "");
@@ -302,7 +315,7 @@ public class Main {
 		}
 		
 		//MOVE SUFFIXES TO END OF ENTRY
-		String suff = getMatch(entry[stichw], "\\A\\(-\\p{L}+\\)");
+		String suff = getFirstMatch(entry[stichw], "\\A\\(-\\p{L}+\\)");
 		if (suff.length() > 0){
 			entry[stichw] = entry[stichw].replace(suff, "").trim();
 			entry[stichw] += " " + suff.trim();
@@ -312,13 +325,13 @@ public class Main {
 		if (headerPrefix.equals("R")){
 			if (entry[doc.getFieldIndex("RGrammatik")].matches(".*?(tr|int|tr/int).*?")){
 				//"(tschainta)"
-				String tr = getMatch(entry[doc.getFieldIndex(headerPrefix + "Subsemantik")], "\\p{L}+");
+				String tr = getFirstMatch(entry[doc.getFieldIndex(headerPrefix + "Subsemantik")], "\\p{L}+");
 				if (tr.length() > 0 && tr.charAt(0) == entry[stichw].charAt(0)){
 					entry[doc.getFieldIndex(headerPrefix + "Subsemantik")] = entry[doc.getFieldIndex(headerPrefix + "Subsemantik")].replace(tr, "").trim();
 					entry[doc.getFieldIndex("RFlex")] = tr + (entry[doc.getFieldIndex("RFlex")].length() == 0 ? "" : "; " + entry[doc.getFieldIndex("RFlex")]);
 				}
 				//"(-ùna)"
-				String femSuff = getMatch(entry[stichw], "\\s\\(\\-\\p{L}*a\\)");
+				String femSuff = getFirstMatch(entry[stichw], "\\s\\(\\-\\p{L}*a\\)");
 				if (femSuff.length() > 0){
 					entry[stichw] = entry[stichw].replace(femSuff, "").trim();
 					entry[doc.getFieldIndex("RFlex")] = entry[doc.getFieldIndex("RFlex")]
@@ -336,7 +349,7 @@ public class Main {
 		
 		// "-vla" etc. mit Komma davor
 		if (headerPrefix.equals("R")){
-			String femAlt = getMatch(entry[stichw], P_REMOVE_FEM);
+			String femAlt = getFirstMatch(entry[stichw], P_REMOVE_FEM);
 			if (femAlt.length() > 0){
 				entry[stichw] = entry[stichw].replace(femAlt, ", " + femAlt);
 			}
@@ -397,7 +410,7 @@ public class Main {
 		return entry;
 	}
 	
-	private static String getMatch(String string, String patternString){
+	private static String getFirstMatch(String string, String patternString){
 		Pattern pattern = Pattern.compile(patternString);
 		Matcher matcher = pattern.matcher(string);
 		String toReturn = "";
@@ -405,6 +418,17 @@ public class Main {
 			toReturn = matcher.group();
 		}
 		return toReturn;
+	}
+	
+	private static String[] getMatches(String string, String patternString){
+		Pattern pattern = Pattern.compile(patternString);
+		Matcher matcher = pattern.matcher(string);
+		String toReturn = "";
+		while (matcher.find()){
+			String match = matcher.group();
+			if (match.length() > 0) toReturn += matcher.group() + "\t";
+		}
+		return toReturn.trim().split("\t");
 	}
 	
 	private static String[] processRedirects(String[] entry, SVDocument doc){
@@ -458,6 +482,32 @@ public class Main {
 		}
 		
 		return entry;
+	}
+	
+	//GENUS VARIANTS EXPANSION
+	private static final String P_GEN_VAR = "\\(\\p{L}+\\)";
+	static Set<String[]> expandEntryVariants(String[] entry, int index){
+		Set<String[]> out = new HashSet<String[]>();
+		if (entry[index].contains("cf.")) return out;
+		//check for matches
+		String[] matches = getMatches(entry[index], P_GEN_VAR);
+		if (matches.length == 0 || matches[0].length() == 0) return out;
+		//process
+		////single matches
+		for (String s : matches){
+			String[] exp = entry.clone();
+			exp[index] = exp[index].replace(s, "");
+			exp[index+1] = exp[index+1].replaceAll("m\\(f\\)", "f");
+			out.add(exp);
+			//System.out.println("[EXPAND]\t" + entry[index] + " === " + exp[index]);
+		}
+		////all matches
+		String[] exp = entry.clone();
+		exp[index] = exp[index].replaceAll(P_GEN_VAR, "");
+		exp[index+1] = exp[index+1].replaceAll("m\\(f\\)", "f");
+		out.add(exp);
+		
+		return out;
 	}
 	
 	
