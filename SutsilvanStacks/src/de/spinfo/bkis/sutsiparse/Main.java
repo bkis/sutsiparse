@@ -102,7 +102,8 @@ public class Main {
 				"varAnführungszeichen", "varSuchergebnis", "varLayout", "varDSort", "varRSort",
 				"DxAusgabe", "RxAusgabe", "xtemp_Achtung_Bearbeitung", "varMailtext", "xvarMailtext",
 				"XTempStichwort", "XTempGrammatik", "varCopiar", "Remartgas", "maalr_timestamp",
-				"Bearbeitungshinweis2", "xvarMail", "xDiever", "vVersiun", "redirect_a", "redirect_b"};
+				"Bearbeitungshinweis2", "xvarMail", "xDiever", "vVersiun", "redirect_a", "redirect_b",
+				"DVariants","RVariants"};
 		String header = "";
 		for (String field : fields) header += field + "\t";
 		header.trim();
@@ -148,17 +149,16 @@ public class Main {
 				entry[doc.getFieldIndex("DStichwort")] = entry[doc.getFieldIndex("DStichwort")].split(" '")[0];
 			
 			entry[0] = "" + id++;
-			doc.addEntry(entry);
 			
 			//EXPAND GENUS VARIANS TO ADDITIONAL DUMMY ENTRIES
-			for (String[] exp : expandEntryVariants(entry, doc.getFieldIndex("DStichwort"))){
-				exp[0] = "" + id++;
-				doc.addEntry(exp);
-			}
-			for (String[] exp : expandEntryVariants(entry, doc.getFieldIndex("RStichwort"))){
-				exp[0] = "" + id++;
-				doc.addEntry(exp);
-			}
+			expandEntryVariants(entry,
+					doc.getFieldIndex("DStichwort"),
+					doc.getFieldIndex("RStichwort"),
+					doc.getFieldIndex("DVariants"),
+					doc.getFieldIndex("RVariants"));
+			
+			//ADD ENTRY TO DOCUMENT
+			doc.addEntry(entry);
 			
 			displayProcess(id, entries.length, false);
 		}
@@ -485,29 +485,33 @@ public class Main {
 	}
 	
 	//GENUS VARIANTS EXPANSION
-	private static final String P_GEN_VAR = "\\(\\p{L}+\\)";
-	static Set<String[]> expandEntryVariants(String[] entry, int index){
-		Set<String[]> out = new HashSet<String[]>();
-		if (entry[index].contains("cf.")) return out;
+	private static String[] expandEntryVariants(String[] entry, int iDStichw, int iRStichw, int iDVar, int iRVar){
+		entry = expandEntryVariants(entry, iDStichw, iDVar);
+		entry = expandEntryVariants(entry, iRStichw, iRVar);
+		return entry;
+	}
+	
+	private static final String P_GEN_VAR = "((?<=\\w)\\(\\p{L}+\\)|\\(\\p{L}+\\)(?=\\w))";
+	private static String[] expandEntryVariants(String[] entry, int iStichwort, int iVariants){
+		if (entry[iStichwort].contains("cf.")) return entry;
 		//check for matches
-		String[] matches = getMatches(entry[index], P_GEN_VAR);
-		if (matches.length == 0 || matches[0].length() == 0) return out;
+		String[] matches = getMatches(entry[iStichwort], P_GEN_VAR);
+		if (matches.length == 0 || matches[0].length() == 0) return entry;
 		//process
-		////single matches
+		entry[iVariants] = entry[iStichwort];
 		for (String s : matches){
-			String[] exp = entry.clone();
-			exp[index] = exp[index].replace(s, "");
-			exp[index+1] = exp[index+1].replaceAll("m\\(f\\)", "f");
-			out.add(exp);
-			//System.out.println("[EXPAND]\t" + entry[index] + " === " + exp[index]);
+			for (String part : entry[iStichwort].split("\\s")){
+				while (part.contains(s)){
+					part = part.replaceFirst("\\Q" + s + "\\E", "");
+					entry[iVariants] += " " + part;
+				}
+			}
 		}
-		////all matches
-		String[] exp = entry.clone();
-		exp[index] = exp[index].replaceAll(P_GEN_VAR, "");
-		exp[index+1] = exp[index+1].replaceAll("m\\(f\\)", "f");
-		out.add(exp);
-		
-		return out;
+		if (matches.length > 1){
+			entry[iVariants] += " " + entry[iStichwort].replaceAll(P_GEN_VAR, "");
+		}
+		entry[iVariants] = entry[iVariants].replaceAll("[\\(\\)]", "");
+		return entry;
 	}
 	
 	
