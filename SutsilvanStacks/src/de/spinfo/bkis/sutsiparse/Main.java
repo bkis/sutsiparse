@@ -103,7 +103,7 @@ public class Main {
 				"DxAusgabe", "RxAusgabe", "xtemp_Achtung_Bearbeitung", "varMailtext", "xvarMailtext",
 				"XTempStichwort", "XTempGrammatik", "varCopiar", "Remartgas", "maalr_timestamp",
 				"Bearbeitungshinweis2", "xvarMail", "xDiever", "vVersiun", "redirect_a", "redirect_b",
-				"DVariants","RVariants"};
+				"DTags","RTags"};
 		String header = "";
 		for (String field : fields) header += field + "\t";
 		header.trim();
@@ -154,8 +154,8 @@ public class Main {
 			expandEntryVariants(entry,
 					doc.getFieldIndex("DStichwort"),
 					doc.getFieldIndex("RStichwort"),
-					doc.getFieldIndex("DVariants"),
-					doc.getFieldIndex("RVariants"));
+					doc.getFieldIndex("DTags"),
+					doc.getFieldIndex("RTags"));
 			
 			//ADD ENTRY TO DOCUMENT
 			doc.addEntry(entry);
@@ -426,7 +426,9 @@ public class Main {
 		String toReturn = "";
 		while (matcher.find()){
 			String match = matcher.group();
-			if (match.length() > 0) toReturn += matcher.group() + "\t";
+			if (match.length() > 0){
+				toReturn += matcher.group() + ";" + matcher.start() + ";" + matcher.end() + "\t";
+			}
 		}
 		return toReturn.trim().split("\t");
 	}
@@ -491,26 +493,23 @@ public class Main {
 		return entry;
 	}
 	
-	private static final String P_GEN_VAR = "((?<=\\w)\\(\\p{L}+\\)|\\(\\p{L}+\\)(?=\\w))";
+	private static final String P_GEN_VAR = "((?<=\\w)\\([\\p{L}\\-]+\\)|\\([\\p{L}\\-]+\\)(?=\\w))";
 	private static String[] expandEntryVariants(String[] entry, int iStichwort, int iVariants){
 		if (entry[iStichwort].contains("cf.")) return entry;
 		//check for matches
 		String[] matches = getMatches(entry[iStichwort], P_GEN_VAR);
 		if (matches.length == 0 || matches[0].length() == 0) return entry;
 		//process
-		entry[iVariants] = entry[iStichwort];
+		Set<String> tags = new HashSet<String>();
+		String raw = entry[iStichwort];
+		tags.addAll(Arrays.asList(raw.split("\\s")));
 		for (String s : matches){
-			for (String part : entry[iStichwort].split("\\s")){
-				while (part.contains(s)){
-					part = part.replaceFirst("\\Q" + s + "\\E", "");
-					entry[iVariants] += " " + part;
-				}
-			}
+			String[] m = s.split("\\Q;\\E");
+			tags.addAll(Arrays.asList((raw.substring(0, Integer.parseInt(m[1])) + raw.substring(Integer.parseInt(m[2]), raw.length())).split("\\s")));
 		}
-		if (matches.length > 1){
-			entry[iVariants] += " " + entry[iStichwort].replaceAll(P_GEN_VAR, "");
-		}
-		entry[iVariants] = entry[iVariants].replaceAll("[\\(\\)]", "");
+		tags.addAll(Arrays.asList(entry[iStichwort].replaceAll(P_GEN_VAR, "").split("\\s")));
+		for (String s : tags) entry[iVariants] += " " + s.replaceAll("[(),\\-\\[\\]]", "");
+		entry[iVariants].trim();
 		return entry;
 	}
 	
@@ -526,7 +525,7 @@ public class Main {
 			processUnits = 0;
 			System.out.print("\t" + step + " / " + of + "\n");
 		} else {
-			System.out.print(processUnits % 10 == 0 ? "#" : "");
+			System.out.print(processUnits % 10 == 0 ? (char)((System.currentTimeMillis()%94)+33) : "");
 		}
 	}
 
